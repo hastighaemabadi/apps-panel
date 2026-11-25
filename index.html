@@ -37,7 +37,7 @@
 </style>
 </head>
 <body>
-<iframe id="frame" title="پنل اپ‌ها" allow="clipboard-write; fullscreen"></iframe>
+<iframe id="frame" title="پنل اپ‌ها" allow="microphone; clipboard-write; fullscreen"></iframe>
 <button id="fab" title="باز کردن بیرون از قاب" aria-label="باز کردن بیرون از قاب">↗</button>
 
 <main id="screen">
@@ -47,8 +47,8 @@
   <a class="btn" id="open" href="#">باز کردن پنل</a>
   <div class="card" id="settings" hidden>
     <strong>نحوه‌ی باز شدن</strong>
-    <label><input type="radio" name="mode" value="redirect"> <span>مستقیم (پیشنهادی)<br><small>مطمئن‌ترین حالت، ورود با گوگل همیشه کار می‌کند.</small></span></label>
-    <label><input type="radio" name="mode" value="frame"> <span>داخل اپ، تمام‌صفحه<br><small>شبیه اپ واقعی؛ فقط اگر در Apps Script گزینه‌ی ALLOWALL فعال باشد.</small></span></label>
+    <label><input type="radio" name="mode" value="redirect"> <span>مستقیم<br><small>اگر داخل اپ وارد حساب گوگل نشد این را بزنید. «با صدا بگو» در این حالت روی گوشی کار نمی‌کند.</small></span></label>
+    <label><input type="radio" name="mode" value="frame"> <span>داخل اپ، تمام‌صفحه (پیشنهادی)<br><small>شبیه اپ واقعی، و «با صدا بگو» هم کار می‌کند.</small></span></label>
   </div>
   <a class="btn ghost" id="toggleSettings" href="#">تنظیمات</a>
 </main>
@@ -62,7 +62,7 @@
                   set(k,v){ try { localStorage.setItem(k,v); } catch(e){} } };
   const params = new URLSearchParams(location.search);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-  let mode = params.get('mode') || store.get('mode') || 'redirect';
+  let mode = params.get('mode') || store.get('mode') || 'frame';
   if (params.get('mode')) store.set('mode', mode);
 
   $('open').href = APP_URL;
@@ -94,6 +94,35 @@
       ? 'برای باز کردن پنل دکمه را بزنید.'
       : 'برای نصب، از منوی مرورگر گزینه‌ی <bdi dir="ltr">Add to Home Screen</bdi> یا <bdi dir="ltr">Install app</bdi> را بزنید. بعد از نصب، با زدن آیکون مستقیم وارد پنل می‌شوید.';
   }
+
+  // پل صدا: پنل داخل قاب اجازه‌ی میکروفون ندارد، پس ضبط و تبدیل گفتار را همین صفحه انجام می‌دهد
+  // و متن را برای پنل می‌فرستد.
+  let rec = null, recSrc = null, recOrigin = null;
+  function toPanel(msg) { try { recSrc.postMessage(Object.assign({ src: 'panel-voice' }, msg), recOrigin); } catch (e) {} }
+  window.addEventListener('message', e => {
+    const d = e.data;
+    if (!d || d.src !== 'panel-voice-cmd' || !/\.googleusercontent\.com$/.test(new URL(e.origin).hostname)) return;
+    if (d.cmd === 'stop') { if (rec) try { rec.stop(); } catch (err) {} return; }
+    if (d.cmd !== 'start') return;
+    recSrc = e.source; recOrigin = e.origin;
+    const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!R) { toPanel({ type: 'error', error: 'service-not-allowed' }); return; }
+    if (rec) try { rec.abort(); } catch (err) {}
+    const r = new R();
+    r.lang = d.lang || 'fa-IR'; r.interimResults = true; r.continuous = true;
+    let fin = '';
+    r.onresult = ev => {
+      let interim = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) fin += ev.results[i][0].transcript; else interim += ev.results[i][0].transcript;
+      }
+      toPanel({ type: 'text', text: fin + interim });
+    };
+    r.onerror = ev => { if (ev.error !== 'aborted') toPanel({ type: 'error', error: ev.error }); };
+    r.onend = () => { if (rec === r) { rec = null; toPanel({ type: 'done' }); } };
+    rec = r;
+    try { r.start(); } catch (err) { rec = null; toPanel({ type: 'error', error: 'audio-capture' }); }
+  });
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

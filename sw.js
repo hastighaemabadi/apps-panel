@@ -1,6 +1,6 @@
 // Caches only the small app shell so the app opens instantly and installs cleanly.
 // The Apps Script panel itself is always loaded live from Google.
-const CACHE = 'apps-panel-shell-v1';
+const CACHE = 'apps-panel-shell-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
